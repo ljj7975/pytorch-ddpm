@@ -1,11 +1,5 @@
 """
-Extremely Minimalistic Implementation of DDPM
-
-https://arxiv.org/abs/2006.11239
-
-Everything is self contained. (Except for pytorch and torchvision... of course)
-
-run it with `python superminddpm.py`
+Training a DDPM for MNIST dataset
 """
 
 from typing import Dict, Tuple
