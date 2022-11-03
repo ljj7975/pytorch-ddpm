@@ -19,6 +19,7 @@ from torchvision.datasets import MNIST
 from torchvision import transforms
 from torchvision.utils import save_image, make_grid
 from datetime import datetime
+from utils.positional_embedding import positional_encoding_1d
 import os
 
 
@@ -64,9 +65,11 @@ class DummyEpsModel(nn.Module):
     Basically, any universal R^n -> R^n model should work.
     """
 
-    def __init__(self, n_channel: int, n_classes:int) -> None:
+    def __init__(self, n_channel: int, n_classes:int, n_T:int) -> None:
         super(DummyEpsModel, self).__init__()
+        # class_bias is learnable while positional encoding is not
         self.class_bias = nn.Embedding(n_classes, 64)
+        self.register_buffer("position_embedding", positional_encoding_1d(128, n_T))
 
         self.layer_1 = blk(n_channel, 64)
         self.layer_2 = blk(64, 128)
@@ -78,15 +81,16 @@ class DummyEpsModel(nn.Module):
         self.layer_8 = nn.Conv2d(64, n_channel, 3, padding=1)
 
     def forward(self, x, t, y) -> torch.Tensor:
-        # Lets think about using t later. In the paper, they used Tr-like positional embeddings.
-        x_1 = self.layer_1(x)
-        x_2 = self.layer_2(x_1)
+        class_embedding = self.class_bias(y)[:, :, None, None]
+        positional_embedding = self.position_embedding[t][:, :, None, None]
+
+        x_1 = self.layer_1(x) + class_embedding
+        x_2 = self.layer_2(x_1) + positional_embedding
         x_3 = self.layer_3(x_2)
         x_4 = self.layer_4(x_3)
         x_5 = self.layer_5(x_4) + x_3
-        x_6 = self.layer_6(x_5) + x_2
-        embedding = self.class_bias(y)[:, :, None, None]
-        x_7 = self.layer_7(x_6) + x_1 + embedding
+        x_6 = self.layer_6(x_5) + x_2 + positional_embedding
+        x_7 = self.layer_7(x_6) + x_1 + class_embedding
         x_8 = self.layer_8(x_7)
         return x_8
 
@@ -126,7 +130,7 @@ class DDPM(nn.Module):
         )  # This is the x_t, which is sqrt(alphabar) x_0 + sqrt(1-alphabar) * eps
         # We should predict the "error term" from this x_t. Loss is what we return.
 
-        return self.criterion(eps, self.eps_model(x_t, _ts / self.n_T, y))
+        return self.criterion(eps, self.eps_model(x_t, _ts, y))
 
     def sample(self, n_sample: int, yh:torch.Tensor, size, device) -> torch.Tensor:
 
@@ -146,7 +150,8 @@ class DDPM(nn.Module):
 
 def train_mnist(n_epoch: int = 50, n_classes: int = 10, device="cuda:0") -> None:
 
-    ddpm = DDPM(eps_model=DummyEpsModel(1, n_classes), betas=(1e-4, 0.02), n_T=1000)
+    n_T = 500
+    ddpm = DDPM(eps_model=DummyEpsModel(1, n_classes, n_T), betas=(1e-4, 0.02), n_T=n_T)
     ddpm.to(device)
 
     tf = transforms.Compose(
@@ -159,7 +164,7 @@ def train_mnist(n_epoch: int = 50, n_classes: int = 10, device="cuda:0") -> None
         download=True,
         transform=tf,
     )
-    dataloader = DataLoader(dataset, batch_size=128, shuffle=True, num_workers=20)
+    dataloader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=16)
     optim = torch.optim.Adam(ddpm.parameters(), lr=3e-4)
 
     output_dir = f"./{datetime.now().strftime('%b-%H-%M-%S')}"
