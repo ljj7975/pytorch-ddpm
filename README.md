@@ -1,6 +1,6 @@
 # pytorch-ddpm
 
-Simple Denoising Diffusion Probabilistic Models (DDPM) implementation in PyTorch.
+Simple [Denoising Diffusion Probabilistic Models (DDPM)](https://arxiv.org/abs/2010.02502) implementation in PyTorch.
 
 The base implementation is taken from: https://github.com/cloneofsimo/minDiffusion.
 
