@@ -15,7 +15,7 @@ from torchvision.utils import save_image, make_grid
 from datetime import datetime
 from utils.positional_embedding import positional_encoding_1d
 import os
-
+from PIL import Image
 
 def ddpm_schedules(beta1: float, beta2: float, T: int) -> Dict[str, torch.Tensor]:
     """
@@ -145,7 +145,7 @@ class DDPM(nn.Module):
 
 def train_mnist(n_epoch: int = 50, n_classes: int = 10, device="cuda:0") -> None:
 
-    n_T = 500
+    n_T = 1000
     ddpm = DDPM(eps_model=DummyEpsModel(1, n_classes, n_T), betas=(1e-4, 0.02), n_T=n_T)
     ddpm.to(device)
 
@@ -169,6 +169,8 @@ def train_mnist(n_epoch: int = 50, n_classes: int = 10, device="cuda:0") -> None
     print(f"val sample labels: {yh}")
     yh = yh.to(device)
 
+    frames = []
+
     for i in range(n_epoch):
         ddpm.train()
 
@@ -191,10 +193,24 @@ def train_mnist(n_epoch: int = 50, n_classes: int = 10, device="cuda:0") -> None
         with torch.no_grad():
             xh = ddpm.sample(16, yh, (1, 28, 28), device)
             grid = make_grid(xh, nrow=4)
-            save_image(grid, f"{output_dir}/ddpm_sample_{i}.png")
+            png_file_path = f"{output_dir}/mnist_{i}.png"
+            save_image(grid, png_file_path)
+
+            frames.append(Image.open(png_file_path))
 
             # save model
             torch.save(ddpm.state_dict(), f"{output_dir}/ddpm_mnist.pth")
+
+    if len(frames) > 0:
+        gif_file_name = ""
+        for idx, y in enumerate(yh):
+            gif_file_name += f"{y}"
+            if idx != len(yh) - 1:
+                gif_file_name += "_"
+
+        total_duration = 5000
+        duration = total_duration // n_epoch
+        frames[0].save(f"{output_dir}/{gif_file_name}.gif", format="GIF", append_images=frames, save_all=True, duration=duration, loop=0)
 
 
 if __name__ == "__main__":
